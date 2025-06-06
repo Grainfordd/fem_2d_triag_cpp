@@ -1,7 +1,8 @@
 Point(1) = {0, 0, 0};
 Point(2) = {4, 0, 0};
-Point(3) = {4, 3, 0};
-Point(4) = {0, 3, 0};
+Point(3) = {4, 4, 0};
+Point(4) = {0, 4, 0};
+
 
 //Line(1) = {2, 1};
 //Line(2) = {3, 2};
@@ -19,8 +20,8 @@ Plane Surface(1) = {1};
 // Physical Line("Hola") = {1,2,3,4};
 Physical Surface("Hola") = {1};
 
-Transfinite Line{1, 3} = 2;
-Transfinite Line{2, 4} = 2;
+Transfinite Line{1, 3} = 5;
+Transfinite Line{2, 4} = 5;
 
 Transfinite Surface{1};
 
@@ -28,6 +29,4 @@ Mesh 2;
 
 Mesh.MshFileVersion = 2.2;
 Save "malla.msh";
-
-
-
+Save "malla.inp";

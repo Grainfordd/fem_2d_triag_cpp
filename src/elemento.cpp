@@ -1,12 +1,16 @@
 #include "../include/elemento.hpp"
+#include <armadillo>
 
 mat Elemento::obtener_factores(Nodo nodos[3]) {
     mat factores = zeros(3, 3);
 
     for (int i = 0; i < 3; i++) {
-        double ai = nodos[(i+1)%3].x * nodos[(i+2)%3].y - nodos[(i+2)%3].x * nodos[(i+1)%3].y;
-        double bi = nodos[(i+1)%3].y - nodos[(i+2)%3].y;
-        double ci = nodos[(i+2)%3].x - nodos[(i+1)%3].x;
+		int j = (i+1)%3;
+		int k = (i+2)%3;
+
+        double ai = nodos[j].x * nodos[k].y - nodos[k].x * nodos[j].y;
+        double bi = nodos[j].y - nodos[k].y;
+        double ci = nodos[k].x - nodos[j].x;
 
         factores(0, i) = ai;
         factores(1, i) = bi;
@@ -24,8 +28,7 @@ double Elemento::calc_area(Nodo nodos[3]) {
     };
 
     double area = 0.5 * det(val);
-    return std::abs(area);
-	/* return area; */
+    return area;
 }
 
 mat Elemento::mat_B(mat fact, double area) {
@@ -38,11 +41,13 @@ mat Elemento::mat_B(mat fact, double area) {
     return B;
 }
 
-Elemento::Elemento(Nodo nodos_in[3], double E_in, double nu_in, double t_in) {
+Elemento::Elemento(int id_,Nodo nodos_in[3], double E_in, double nu_in, double t_in) {
+	id = id_;
     E = E_in;
     nu = nu_in;
     t = t_in;
     area = calc_area(nodos_in);
+
     factores = obtener_factores(nodos_in);
 
     for (int i = 0; i < 3; i++) {
@@ -58,5 +63,4 @@ Elemento::Elemento(Nodo nodos_in[3], double E_in, double nu_in, double t_in) {
     D = D * E / (1 - nu*nu);
     B = mat_B(factores, area);
     K = t * area * B.t() * D * B;
-    K2 = K;
 }

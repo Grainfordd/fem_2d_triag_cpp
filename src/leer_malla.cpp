@@ -59,9 +59,9 @@ std::vector<std::vector<int>> leer_elementos(const std::string& filename) {
         }
     }
 
-    for (auto& vec : elementos){
-        std::sort(vec.begin(), vec.end());
-    }
+    /* for (auto& vec : elementos){ */
+    /*     std::sort(vec.begin(), vec.end()); */
+    /* } */
 
     return elementos;
 }

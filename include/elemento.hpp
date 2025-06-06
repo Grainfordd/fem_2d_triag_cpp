@@ -3,7 +3,9 @@
 
 #include "nodo.hpp"
 #include <armadillo>
-#include <iostream>
+#include <cmath>
+#include <algorithm>
+
 
 using namespace arma;
 
@@ -11,15 +13,22 @@ class Elemento {
 public:
     double E, nu, t;
     double area;
-    mat D, K, K2, B, factores;
+    mat D, K, B, factores;
     Nodo nodos[3];
+	int id;
+	vec esfuerzos;
+	double esf_von_mises;
 
-    Elemento(Nodo nodos_in[3] = 0, double E_in = 0, double nu_in = 0, double t_in = 0);
+    Elemento(int id_, Nodo nodos_in[3] = 0, double E_in = 0, double nu_in = 0, double t_in = 0);
+
+	~Elemento(){};
     
 private:
+	Nodo ordernar_nodos(Nodo nodos[3]);
     mat obtener_factores(Nodo nodos[3]);
     double calc_area(Nodo nodos[3]);
     mat mat_B(mat fact, double area);
+
 };
 
 #endif

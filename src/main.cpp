@@ -1,13 +1,22 @@
 #include <armadillo>
+/* #include <iomanip> */
+#include <string>
 #include <vector>
 
 #include "../include/elemento.hpp"
 #include "../include/nodo.hpp"
 #include "../include/leer_malla.hpp"
 #include "../include/utils.hpp"
+#include "../include/vtk_writer.hpp"
 
 using namespace std;
 using namespace arma;
+
+void mostrar_elementos(vector<Elemento> elementos, int num_elementos);
+void mostrar_desp(vec desp, int num_desp);
+void ordenar_nodos(Nodo nodos[], int tamaño);
+vec calc_esf(vec desp, Elemento elemento);
+double von_mises(vec esfuerzos);
 
 int main(void){
 	double E = 200e3;
@@ -19,38 +28,42 @@ int main(void){
 	vector<Nodo> nodos = leer_nodos(malla);
 	vector<vector<int>> elementos_indices = leer_elementos(malla);
 
+
 	vector<Elemento> elementos;
+	int i = 1;
 	for (const auto& indices : elementos_indices) {
-		Nodo nodos_elemento[3] = {nodos[indices[0]-1], nodos[indices[1]-1], nodos[indices[2]-1]};
-		if (calc_area(nodos_elemento) < 0){
-			swap(nodos_elemento[1], nodos_elemento[2]);
-		}
-		elementos.emplace_back(nodos_elemento, E, nu, t);
+		Nodo nodos_elemento[] = {nodos[indices[0]-1], nodos[indices[1]-1], nodos[indices[2]-1]};
+
+		cout << i << " " << " " << E<< " " << nu << " " << t << endl;
+
+		elementos.emplace_back(i, nodos_elemento, E, nu, t);
+		i++;
 	}
 	// -------------------------------------------------------------------------------------
 
 	int n = nodos.size() * 2;
 	int num_elementos = elementos.size();
 
-	//  ---------------------- Expandir matrices de rigidez para cada elemento ------------
-	for (int k = 0; k < num_elementos; k++){
-		for (int i = 1; i <= n ; i++){
-			bool cond1 = i != elementos[k].nodos[0].id*2 -1 && i != elementos[k].nodos[0].id*2;
-			bool cond2 = i != elementos[k].nodos[1].id*2 -1 && i != elementos[k].nodos[1].id*2;
-			bool cond3 = i != elementos[k].nodos[2].id*2 -1 && i != elementos[k].nodos[2].id*2;
-
-			if (cond1 && cond2 && cond3){
-				elementos[k].K2.insert_rows(i-1, 1);
-				elementos[k].K2.insert_cols(i-1, 1);
-			}
-		}
-	}
-	// --------------------------------------------------------------------------------------
 
 	// Ensamblar matriz de rigidez global
 	mat k_glob = zeros(n, n);
+
+	int n1;
+	int n2;
+	int n3;
+
 	for (int i = 0; i < num_elementos; i++){
-		k_glob += elementos[i].K2;
+		n1 = elementos[i].nodos[0].id;
+		n2 = elementos[i].nodos[1].id;
+		n3 = elementos[i].nodos[2].id;
+
+		vector<int>  indices_glob= {n1*2-2, n1*2-1, n2*2-2, n2*2-1, n3*2-2, n3*2-1};
+		for (int j = 0; j < 6 ; j++) {
+			for (int k = 0; k < 6; k++){
+				k_glob(indices_glob[j], indices_glob[k]) += elementos[i].K(j,k);
+			}
+		}
+
 	}
     // ----------------------------- Leer Fuerzas -------------------------------------------- 
 	mat f_read;
@@ -89,6 +102,108 @@ int main(void){
 			k_red = eliminar_columna(k_red, i);
 		}
 	}
-	vec desplazamientos = solve(k_red, f_red);
-	desplazamientos.print();
+
+
+	vec disp_red = solve(k_red, f_red);
+	int k = disp_red.n_rows-1;
+
+	for (int i = disp.n_rows-1; i >= 0; i--){
+		if (disp[i] != 0){
+			disp[i] = disp_red[k];
+			k--;
+		}
+	}
+
+	vec F = k_glob * disp;
+	/* F.print(); */
+
+	/* disp.print(); */
+	for (int i = 0 ; i <  num_elementos ; i++){
+		ordenar_nodos(elementos[i].nodos, 3);
+		vec disp_elem = zeros(6);
+		for (int j = 0; j < 3; j++) {
+			disp_elem(j * 2) = disp(elementos[i].nodos[j].id * 2 - 2);      // componente x
+			disp_elem(j * 2 + 1) = disp(elementos[i].nodos[j].id * 2 - 1);  // componente y
+    	}
+
+		elementos[i].esfuerzos = calc_esf(disp_elem, elementos[i]);
+		elementos[i].esf_von_mises = von_mises(elementos[i].esfuerzos);
+
+		/* cout << elementos[i].esf_von_mises << endl; */
+	}
+
+	/* mostrar_desp(desplazamientos, desplazamientos.n_rows); */
+	/* mostrar_elementos(elementos, num_elementos); */
+	mostrar_desp(disp,  n);
+	/* mostrar_desp(F,  n); */
+	VTKWriter vtk_writer;
+    
+    // Crear directorio de resultados si no existe
+    system("mkdir -p ../results");
+    
+    // Opción 1: Exportar resultados básicos
+    string archivo = "../results/resultados.vtk";
+    vtk_writer.exportar_basico(archivo, nodos, elementos, disp);
+	/* k_glob.print(); */
+	/* cout << elementos[0].K.is_symmetric() << endl; */
+/* cout << k_glob.is_symmetric() << endl; */
+
+	/* F.print(); */
+
+	return 0;
+}
+
+
+vec calc_esf(vec desp, Elemento elemento){
+	vec esfuerzos = elemento.D * elemento.B * desp;
+	return esfuerzos;
+}
+
+double von_mises(vec esfuerzos){
+	double sx = esfuerzos[0];
+	double sy = esfuerzos[1];
+	double tau = esfuerzos[2];
+	double esf_von_mises = sqrt(sx*sx + sy*sy - sx*sy + 3*tau*tau);
+	return esf_von_mises;
+
+}
+
+void mostrar_desp(vec desp, int num_desp){
+	int j = 1;
+	for (int i = 0; i < num_desp-4 + 4; i+=2){
+		cout << j <<  ": "<< "( " << desp[i] << " , " << desp[i+1] << " )" <<  endl;
+		j++;
+	}
+}
+
+
+void mostrar_elementos(vector<Elemento> elementos, int num_elementos){
+	for (int i = 0; i < num_elementos ; i++){
+		cout << endl << "###################### Elemento " << elementos[i].id<<" ##############################################" << endl;
+		cout << "Nodos" << endl ;
+
+		for (int j = 0; j < 3; j++){
+			Nodo nodo_ = elementos[i].nodos[j];
+			
+			cout << nodo_.id << "   (" << nodo_.x << " , " << nodo_.y << ")"  << endl;
+		}
+		cout << endl;
+
+		elementos[i].K.print();
+		cout << endl << "################################################################################" << endl;
+	}
+
+}
+
+void ordenar_nodos(Nodo nodos[], int tamaño) {
+    for (int i = 0; i < tamaño - 1; i++) {
+        for (int j = 0; j < tamaño - 1 - i; j++) {
+            if (nodos[j].id > nodos[j + 1].id) {
+                // Intercambiar nodos
+                Nodo temp = nodos[j];
+                nodos[j] = nodos[j + 1];
+                nodos[j + 1] = temp;
+            }
+        }
+    }
 }
