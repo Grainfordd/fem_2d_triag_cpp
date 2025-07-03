@@ -18,8 +18,8 @@ def crear_malla():
     l3 = gm.add_line(p3, p4)
     l4 = gm.add_line(p4, p1)
 
-    n = 10
-    m = 10
+    n = 3
+    m = 3
 
     cl1 = gm.add_curve_loop([l1, l2, l3, l4])
 
@@ -39,10 +39,11 @@ def crear_malla():
     gm.synchronize()
     gmsh.model.mesh.generate(2)
 
-    gmsh.write('malla_python.msh')
+    gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
+    gmsh.write('malla.msh')
     info = gmsh.model.mesh.getNodes()
 
-    # gmsh.fltk.run()
+    gmsh.fltk.run()
 
     return info, ancho
 

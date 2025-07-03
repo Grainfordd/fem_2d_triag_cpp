@@ -14,12 +14,13 @@ public:
     double E, nu, t;
     double area;
     mat D, K, B, factores;
-    Nodo nodos[3];
+    /* Nodo nodos[3]; */
 	int id;
 	vec esfuerzos;
 	double esf_von_mises;
+	std::vector<int> nodos_id;
 
-    Elemento(int id_, Nodo nodos_in[3] = 0, double E_in = 0, double nu_in = 0, double t_in = 0);
+    Elemento(int id_, std::vector<int>nodos_id_in, std::vector<Nodo> global_nodos, double E_in = 0, double nu_in = 0, double t_in = 0);
 
 	~Elemento(){};
     

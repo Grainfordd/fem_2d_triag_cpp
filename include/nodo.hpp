@@ -6,7 +6,7 @@ public:
     double x, y;
     int id;
 
-    Nodo(int val_nodo = 0, double x_val = 0, double y_val = 0);
+    Nodo(int val_nodo = 0, double x_= 0, double y_= 0);
 
 	~Nodo(){};
 };

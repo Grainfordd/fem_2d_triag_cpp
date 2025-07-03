@@ -7,16 +7,103 @@
 #include "../include/nodo.hpp"
 #include "../include/leer_malla.hpp"
 #include "../include/utils.hpp"
-#include "../include/vtk_writer.hpp"
 
 using namespace std;
 using namespace arma;
 
-void mostrar_elementos(vector<Elemento> elementos, int num_elementos);
+/* void mostrar_elementos(vector<Elemento> elementos, int num_elementos); */
 void mostrar_desp(vec desp, int num_desp);
-void ordenar_nodos(Nodo nodos[], int tamaño);
 vec calc_esf(vec desp, Elemento elemento);
 double von_mises(vec esfuerzos);
+
+void escribir_vtk(const std::string& filename, 
+                  const std::vector<Nodo>& nodos, 
+                  const std::vector<Elemento>& elementos,
+                  const arma::vec& desplazamientos) {
+    
+    std::ofstream vtk_file(filename);
+
+    if (!vtk_file.is_open()) {
+        std::cerr << "Error: No se pudo abrir el archivo para escribir: " << filename << std::endl;
+        return;
+    }
+
+    // 1. Cabecera del archivo VTK
+    vtk_file << "# vtk DataFile Version 3.0" << std::endl;
+    vtk_file << "Resultados de Analisis de Elementos Finitos" << std::endl;
+    vtk_file << "ASCII" << std::endl;
+    vtk_file << "DATASET UNSTRUCTURED_GRID" << std::endl;
+    vtk_file << std::endl;
+
+    // 2. Escribir las coordenadas de los nodos (Puntos)
+    vtk_file << "POINTS " << nodos.size() << " double" << std::endl;
+    for (const auto& nodo : nodos) {
+        vtk_file << nodo.x << " " << nodo.y << " " << 0.0 << std::endl;
+    }
+    vtk_file << std::endl;
+
+    // 3. Escribir la conectividad de los elementos (Celdas)
+    vtk_file << "CELLS " << elementos.size() << " " << elementos.size() * 4 << std::endl;
+    for (const auto& elem : elementos) {
+        vtk_file << "3 " << elem.nodos_id[0] - 1 
+                 << " " << elem.nodos_id[1] - 1 
+                 << " " << elem.nodos_id[2] - 1 << std::endl;
+    }
+    vtk_file << std::endl;
+
+    // 4. Escribir los tipos de elementos (Todos son triángulos)
+    vtk_file << "CELL_TYPES " << elementos.size() << std::endl;
+    for (size_t i = 0; i < elementos.size(); ++i) {
+        vtk_file << "5" << std::endl; // 5 es el código para VTK_TRIANGLE
+    }
+    vtk_file << std::endl;
+
+    // 5. Escribir datos asociados a los puntos (Desplazamientos)
+    vtk_file << "POINT_DATA " << nodos.size() << std::endl;
+    vtk_file << "VECTORS Desplazamientos double" << std::endl;
+    for (const auto& nodo : nodos) {
+        int idx_u = nodo.id * 2 - 2;
+        int idx_v = nodo.id * 2 - 1;
+        vtk_file << desplazamientos(idx_u) << " " << desplazamientos(idx_v) << " 0.0" << std::endl;
+    }
+    vtk_file << std::endl;
+    
+    // 6. Escribir datos asociados a las celdas (Esfuerzos)
+    vtk_file << "CELL_DATA " << elementos.size() << std::endl;
+    // Esfuerzo de Von Mises (escalar)
+    vtk_file << "SCALARS Esfuerzo_Von_Mises double 1" << std::endl;
+    vtk_file << "LOOKUP_TABLE default" << std::endl;
+    for (const auto& elem : elementos) {
+        vtk_file << elem.esf_von_mises << std::endl;
+    }
+    vtk_file << std::endl;
+
+    // Esfuerzos Sx, Sy, Txy (como campos escalares separados)
+    vtk_file << "SCALARS Sigma_x double 1" << std::endl;
+    vtk_file << "LOOKUP_TABLE default" << std::endl;
+    for (const auto& elem : elementos) {
+        vtk_file << elem.esfuerzos(0) << std::endl;
+    }
+    vtk_file << std::endl;
+
+    vtk_file << "SCALARS Sigma_y double 1" << std::endl;
+    vtk_file << "LOOKUP_TABLE default" << std::endl;
+    for (const auto& elem : elementos) {
+        vtk_file << elem.esfuerzos(1) << std::endl;
+    }
+    vtk_file << std::endl;
+
+    vtk_file << "SCALARS Tau_xy double 1" << std::endl;
+    vtk_file << "LOOKUP_TABLE default" << std::endl;
+    for (const auto& elem : elementos) {
+        vtk_file << elem.esfuerzos(2) << std::endl;
+    }
+    vtk_file << std::endl;
+
+    vtk_file.close();
+    std::cout << "-> Archivo VTK '" << filename << "' generado exitosamente." << std::endl;
+}
+
 
 int main(void){
 	double E = 200e3;
@@ -28,42 +115,42 @@ int main(void){
 	vector<Nodo> nodos = leer_nodos(malla);
 	vector<vector<int>> elementos_indices = leer_elementos(malla);
 
+	cout << elementos_indices[0][0] << endl;
+	cout << elementos_indices[0][1] << endl;
+	cout << elementos_indices[0][2] << endl;
+	return 0;
+
 
 	vector<Elemento> elementos;
 	int i = 1;
 	for (const auto& indices : elementos_indices) {
-		Nodo nodos_elemento[] = {nodos[indices[0]-1], nodos[indices[1]-1], nodos[indices[2]-1]};
 
-		cout << i << " " << " " << E<< " " << nu << " " << t << endl;
-
-		elementos.emplace_back(i, nodos_elemento, E, nu, t);
+		elementos.emplace_back(i, indices, nodos, E, nu, t);
 		i++;
 	}
 	// -------------------------------------------------------------------------------------
-
 	int n = nodos.size() * 2;
 	int num_elementos = elementos.size();
-
 
 	// Ensamblar matriz de rigidez global
 	mat k_glob = zeros(n, n);
 
-	int n1;
-	int n2;
-	int n3;
-
+	int n1, n2, n3;
 	for (int i = 0; i < num_elementos; i++){
-		n1 = elementos[i].nodos[0].id;
-		n2 = elementos[i].nodos[1].id;
-		n3 = elementos[i].nodos[2].id;
+		n1 = nodos[elementos[i].nodos_id[0]-1].id;
+		n2 = nodos[elementos[i].nodos_id[1]-1].id;
+		n3 = nodos[elementos[i].nodos_id[2]-1].id;
 
-		vector<int>  indices_glob= {n1*2-2, n1*2-1, n2*2-2, n2*2-1, n3*2-2, n3*2-1};
+		vector<int>  indices_glob= {
+			n1*2-2, n1*2-1,
+			n2*2-2, n2*2-1,
+			n3*2-2, n3*2-1
+		};
 		for (int j = 0; j < 6 ; j++) {
 			for (int k = 0; k < 6; k++){
 				k_glob(indices_glob[j], indices_glob[k]) += elementos[i].K(j,k);
 			}
 		}
-
 	}
     // ----------------------------- Leer Fuerzas -------------------------------------------- 
 	mat f_read;
@@ -103,7 +190,6 @@ int main(void){
 		}
 	}
 
-
 	vec disp_red = solve(k_red, f_red);
 	int k = disp_red.n_rows-1;
 
@@ -115,40 +201,19 @@ int main(void){
 	}
 
 	vec F = k_glob * disp;
-	/* F.print(); */
 
-	/* disp.print(); */
 	for (int i = 0 ; i <  num_elementos ; i++){
-		ordenar_nodos(elementos[i].nodos, 3);
 		vec disp_elem = zeros(6);
 		for (int j = 0; j < 3; j++) {
-			disp_elem(j * 2) = disp(elementos[i].nodos[j].id * 2 - 2);      // componente x
-			disp_elem(j * 2 + 1) = disp(elementos[i].nodos[j].id * 2 - 1);  // componente y
+			disp_elem(j*2) = disp(nodos[elementos[i].nodos_id[j] - 1].id * 2 -2);
+			disp_elem(j*2+1) = disp(nodos[elementos[i].nodos_id[j] - 1].id * 2 -1);
     	}
-
 		elementos[i].esfuerzos = calc_esf(disp_elem, elementos[i]);
 		elementos[i].esf_von_mises = von_mises(elementos[i].esfuerzos);
-
-		/* cout << elementos[i].esf_von_mises << endl; */
 	}
 
-	/* mostrar_desp(desplazamientos, desplazamientos.n_rows); */
-	/* mostrar_elementos(elementos, num_elementos); */
 	mostrar_desp(disp,  n);
-	/* mostrar_desp(F,  n); */
-	VTKWriter vtk_writer;
-    
-    // Crear directorio de resultados si no existe
-    system("mkdir -p ../results");
-    
-    // Opción 1: Exportar resultados básicos
-    string archivo = "../results/resultados.vtk";
-    vtk_writer.exportar_basico(archivo, nodos, elementos, disp);
-	/* k_glob.print(); */
-	/* cout << elementos[0].K.is_symmetric() << endl; */
-/* cout << k_glob.is_symmetric() << endl; */
-
-	/* F.print(); */
+	escribir_vtk("resultados.vtk", nodos, elementos, disp);
 
 	return 0;
 }
@@ -176,34 +241,3 @@ void mostrar_desp(vec desp, int num_desp){
 	}
 }
 
-
-void mostrar_elementos(vector<Elemento> elementos, int num_elementos){
-	for (int i = 0; i < num_elementos ; i++){
-		cout << endl << "###################### Elemento " << elementos[i].id<<" ##############################################" << endl;
-		cout << "Nodos" << endl ;
-
-		for (int j = 0; j < 3; j++){
-			Nodo nodo_ = elementos[i].nodos[j];
-			
-			cout << nodo_.id << "   (" << nodo_.x << " , " << nodo_.y << ")"  << endl;
-		}
-		cout << endl;
-
-		elementos[i].K.print();
-		cout << endl << "################################################################################" << endl;
-	}
-
-}
-
-void ordenar_nodos(Nodo nodos[], int tamaño) {
-    for (int i = 0; i < tamaño - 1; i++) {
-        for (int j = 0; j < tamaño - 1 - i; j++) {
-            if (nodos[j].id > nodos[j + 1].id) {
-                // Intercambiar nodos
-                Nodo temp = nodos[j];
-                nodos[j] = nodos[j + 1];
-                nodos[j + 1] = temp;
-            }
-        }
-    }
-}
